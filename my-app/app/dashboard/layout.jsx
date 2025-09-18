@@ -35,16 +35,11 @@ export default function DashboardLayout({ children }) {
   }
 
   return (
-    <SidebarProvider /* className="min-h-screen" is fine if you want */>
+    <SidebarProvider className="min-h-screen" /*  is fine if you want */>
       <AppSidebar />
-
       <SidebarInset>
-        <header className="sticky z-20 flex h-14 items-center gap-2 border-b bg-white/70 backdrop-blur px-4">
-          <SidebarTrigger className="-ml-1" />
-          <h1 className="text-sm font-medium text-gray-600">Dashboard</h1>
-        </header>
-
-        <div className="p-6">{children}</div>
+        <SidebarTrigger className="mt-4" />
+        <div>{children}</div>
       </SidebarInset>
     </SidebarProvider>
   );

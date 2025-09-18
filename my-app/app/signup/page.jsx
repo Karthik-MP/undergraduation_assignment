@@ -102,10 +102,7 @@ export default function SignupPage() {
       //   createdAt: serverTimestamp(),
       // });
 
-      toast({
-        title: "Account created 🎉",
-        description: "We’ve sent a verification email. Redirecting…",
-      });
+      toast.success("Account created 🎉", "We’ve sent a verification email. Redirecting…");
 
       router.push("/login");
     } catch (err) {
@@ -120,11 +117,7 @@ export default function SignupPage() {
           ? "Invalid email address."
           : "Signup failed. Please try again.";
 
-      toast({
-        title: "Signup error",
-        description: msg,
-        variant: "destructive",
-      });
+      toast.error("Signup error", msg);
     }
   };
 

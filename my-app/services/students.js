@@ -1,196 +1,164 @@
-// services/students.js
-import { db } from "@/services/firebase"; // 🔁 adjust path if different
+// /lib/students.js
+"use client";
 import {
-  collection,
-  query,
-  where,
-  orderBy,
-  limit,
-  getDocs,
-  startAfter,
-  serverTimestamp,
-  doc,
-  getDoc,
-  addDoc,
+  collection, doc, getDocs, getDoc, query, where, orderBy, limit, startAfter,
+  addDoc, serverTimestamp, updateDoc
 } from "firebase/firestore";
-import { PAGE_SIZE_DEFAULT } from "@/lib/constants";
+import { z } from "zod";
+import { db } from "@/services/firebase";
 
-// Utility: merge + unique by id
-function uniqById(rows) {
-  const map = new Map();
-  rows.forEach((r) => map.set(r.id, r));
-  return Array.from(map.values());
-}
+// Zod schema for robust runtime validation
+export const StudentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string().email(),
+  phone: z.string().optional().nullable(),
+  country: z.string().optional().nullable(),
+  grade: z.string().optional().nullable(),
+  status: z.enum(["Exploring", "Shortlisting", "Applying", "Submitted", "Accepted"]),
+  lastActive: z.any().optional(),
+  highIntent: z.boolean().optional().default(false),
+  needsEssayHelp: z.boolean().optional().default(false),
+  progress: z.number().min(0).max(100).default(0),
+  createdAt: z.any().optional(),
+  updatedAt: z.any().optional(),
+});
 
-// QUICK FILTER helpers (some need client-side post-filtering)
-function applyQuickFilterClient(rows, quick) {
-  if (!quick) return rows;
-  const now = Date.now();
-  switch (quick) {
-    case "stale7":
-      return rows.filter(
-        (r) =>
-          !r.lastContactedAt ||
-          now - (r.lastContactedAt?.toMillis?.() ?? r.lastContactedAt) >
-            7 * 24 * 60 * 60 * 1000
-      );
-    case "highIntent":
-      return rows.filter((r) => (r.intentScore ?? 0) >= 70);
-    case "needsEssay":
-      return rows.filter((r) => !!r.needsEssayHelp);
-    default:
-      return rows;
+// transform Firestore doc -> Student
+const asStudent = (d) => {
+  const data = d.data();
+  const parsed = StudentSchema.safeParse({ id: d.id, ...data });
+  if (!parsed.success) {
+    const msg = parsed.error?.issues?.map(i => i.message).join(", ");
+    throw new Error(`Student parse error for ${d.id}: ${msg}`);
   }
-}
+  return parsed.data;
+};
 
-/**
- * Cursor-based listing from Firestore.
- * @param {Object} params
- * @param {string} params.q - search text (prefix on name/email)
- * @param {string} params.status - status filter
- * @param {string} params.quick - quick filter key
- * @param {number} params.pageSize - items per page
- * @param {any} params.cursor - Firestore DocumentSnapshot (or null) to start after
- * @returns {Promise<{rows, nextCursor, totalApprox, stats}>}
- */
-export async function listStudents({
-  q,
-  status,
-  quick,
-  pageSize = PAGE_SIZE_DEFAULT,
+export async function fetchStudentsPage({
+  qText = "",
+  status = "",
+  quick = "",
+  pageSize = 10,
   cursor = null,
 }) {
-  const col = collection(db, "students");
+  try {
+    const colRef = collection(db, "students");
+    const filters = [];
 
-  // Base query: sort by lastActive desc for good recency UX
-  const baseClauses = [orderBy("lastActive", "desc"), limit(pageSize)];
-  if (cursor) baseClauses.push(startAfter(cursor));
+    console.log("Incoming filter values:", {
+      qText,
+      status,
+      quick,
+      pageSize,
+      cursor,
+    });
 
-  // If only status filter (no text search), we can do it server-side:
-  let q1 = query(col, ...(status ? [where("status", "==", status)] : []), ...baseClauses);
-  let snap1 = await getDocs(q1);
-  let rows1 = snap1.docs.map((d) => ({ id: d.id, ...d.data(), __snap: d }));
+    // 🔍 Search filter
+    if (qText) {
+      const qlc = qText.toLowerCase();
+      console.log(`Applying name search filter for prefix: '${qlc}'`);
+      filters.push(where("name_lc", ">=", qlc));
+      filters.push(where("name_lc", "<=", qlc + "\uf8ff"));
+    }
 
-  // If text search present, do a separate prefix query on name_lower and email_lower and merge
-  if (q) {
-    const text = q.toLowerCase();
-    // because Firestore needs orderBy on the field we prefix search
-    const nameQ = query(
-      col,
-      orderBy("name_lower"),
-      // name_lower >= text AND name_lower < text + \uf8ff
-      // Next.js app router client SDK lacks composite operators, so we emulate with two range conditions:
-      where("name_lower", ">=", text),
-      where("name_lower", "<", text + "\uf8ff"),
+    // 📌 Status filter
+    if (status) {
+      console.log(`Applying status filter: status == '${status}'`);
+      filters.push(where("status", "==", status));
+    }
+
+    // ⚡ Quick filters
+    if (quick === "high-intent") {
+      console.log("Applying quick filter: highIntent == true");
+      filters.push(where("highIntent", "==", true));
+    } else if (quick === "needs-essay") {
+      console.log("Applying quick filter: needsEssayHelp == true");
+      filters.push(where("needsEssayHelp", "==", true));
+    } else if (quick === "not-contacted-7d") {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000);
+      console.log(
+        `Applying quick filter: lastActive < ${sevenDaysAgo.toISOString()}`
+      );
+      filters.push(where("lastActive", "<", sevenDaysAgo));
+    }
+
+    console.log("Final Firestore filters:", filters);
+
+    // 🔄 Build the Firestore query
+    let qy = query(
+      colRef,
+      ...filters,
+      orderBy("lastActive", "desc"),
       limit(pageSize)
     );
-    const emailQ = query(
-      col,
-      orderBy("email_lower"),
-      where("email_lower", ">=", text),
-      where("email_lower", "<", text + "\uf8ff"),
-      limit(pageSize)
-    );
-    const [nameSnap, emailSnap] = await Promise.all([getDocs(nameQ), getDocs(emailQ)]);
-    const nameRows = nameSnap.docs.map((d) => ({ id: d.id, ...d.data(), __snap: d }));
-    const emailRows = emailSnap.docs.map((d) => ({ id: d.id, ...d.data(), __snap: d }));
 
-    // merge with recency preference
-    const merged = uniqById([...nameRows, ...emailRows, ...rows1])
-      .sort((a, b) => (b.lastActive?.toMillis?.() ?? 0) - (a.lastActive?.toMillis?.() ?? 0))
-      .slice(0, pageSize);
+    if (cursor) {
+      console.log("Using pagination cursor:", cursor);
+      qy = query(
+        colRef,
+        ...filters,
+        orderBy("lastActive", "desc"),
+        startAfter(cursor),
+        limit(pageSize)
+      );
+    }
 
-    // apply status + quick filters post-merge if needed
-    let filtered = merged;
-    if (status) filtered = filtered.filter((r) => r.status === status);
-    filtered = applyQuickFilterClient(filtered, quick);
+    console.log("Running Firestore query...");
+    const snap = await getDocs(qy);
 
-    // nextCursor is from the last doc of the recency-ordered batch (if any)
-    const nextCursor = filtered.length ? filtered[filtered.length - 1].__snap : null;
+    console.log(`Fetched ${snap.docs.length} student(s) from Firestore.`);
 
-    // simple stats (approximate: cheap aggregate by extra small queries)
-    const stats = await getStatsApprox();
+    // 👇 NEW: Print raw document data
+    snap.docs.forEach((doc, index) => {
+      console.log(`Document #${index + 1}:`, {
+        id: doc.id,
+        data: doc.data(),
+      });
+    });
 
-    return {
-      rows: filtered.map(stripSnap),
-      nextCursor,
-      totalApprox: undefined, // Firestore doesn't provide cheap count without count() aggregation
-      stats,
-    };
+    const docs = snap.docs.map(asStudent);
+    const nextCursor =
+      snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
+
+    console.log("Returning result with nextCursor:", nextCursor);
+
+    return { items: docs, nextCursor };
+  } catch (err) {
+    console.error("fetchStudentsPage error:", err);
+    throw err;
   }
-
-  // No text search case: we already got snap1
-  let filtered = applyQuickFilterClient(rows1, quick);
-  const nextCursor = snap1.docs.length ? snap1.docs[snap1.docs.length - 1] : null;
-  const stats = await getStatsApprox();
-
-  return {
-    rows: filtered.map(stripSnap),
-    nextCursor,
-    totalApprox: undefined,
-    stats,
-  };
 }
 
-function stripSnap(r) {
-  const copy = { ...r };
-  delete copy.__snap;
-  return copy;
-}
 
-// Approx stats (fast & cheap). For accurate counts use Firestore count() aggregation (requires v9.21+).
-async function getStatsApprox() {
-  // You can upgrade to use count() with aggregate queries if enabled on your project.
-  // Here we fetch small windows to avoid heavy reads; feel free to replace with aggregate().
-  return {
-    active: undefined,    // optional, can compute client-side if you fetch enough
-    essay: undefined,
-    submitted: undefined,
-  };
-}
-
-export async function getStudent(id) {
+export async function fetchStudentById(id) {
   const ref = doc(db, "students", id);
   const snap = await getDoc(ref);
   if (!snap.exists()) throw new Error("Student not found");
-
-  const base = { id: snap.id, ...snap.data() };
-
-  // subcollections (optional)
-  const [commSnap, notesSnap, timelineSnap] = await Promise.all([
-    getDocs(query(collection(ref, "commLog"), orderBy("at", "desc"), limit(50))),
-    getDocs(query(collection(ref, "notes"), orderBy("at", "desc"), limit(50))),
-    getDocs(query(collection(ref, "timeline"), orderBy("at", "desc"), limit(50))),
-  ]);
-
-  const commLog = commSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  const notes = notesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  const timeline = timelineSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-  return {
-    ...base,
-    commLog,
-    notes,
-    timeline,
-  };
+  return asStudent(snap);
 }
 
-export async function addNote(id, { note }) {
-  const ref = collection(doc(db, "students", id), "notes");
-  await addDoc(ref, { note, at: serverTimestamp() });
-  return { ok: true };
+export async function addCommunication(studentId, payload) {
+  const ref = collection(db, "students", studentId, "communications");
+  await addDoc(ref, {
+    ...payload,
+    createdAt: serverTimestamp(),
+  });
 }
 
-export async function logComm(id, payload) {
-  const ref = collection(doc(db, "students", id), "commLog");
-  await addDoc(ref, { ...payload, at: serverTimestamp() });
-  return { ok: true };
+export async function addNote(studentId, payload) {
+  const ref = collection(db, "students", studentId, "notes");
+  await addDoc(ref, {
+    ...payload,
+    createdAt: serverTimestamp(),
+  });
 }
 
-// mock action placeholders (keep your UI working)
-export async function triggerFollowUp() {
-  return { ok: true };
-}
-export async function scheduleTask() {
-  return { ok: true };
+export async function updateStudentProgress(studentId, progress, status) {
+  const ref = doc(db, "students", studentId);
+  await updateDoc(ref, {
+    progress,
+    ...(status ? { status } : {}),
+    updatedAt: serverTimestamp(),
+  });
 }

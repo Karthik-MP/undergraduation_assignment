@@ -14,7 +14,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { usePathname, useRouter } from "next/navigation";
-import { Home, Users, Mail, BarChart3, Settings, LogOut } from "lucide-react";
+import { Home, Users, Mail, BarChart3, Settings, LogOut, BadgePlus } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { auth } from "@/services/firebase";
 import { useAuth } from "@/contexts/AuthContext"; // <- adjust path to your provider
@@ -32,8 +32,9 @@ export function AppSidebar() {
   const nav = [
     { href: "/dashboard", label: "Home", icon: Home },
     { href: "/dashboard/students", label: "Students", icon: Users },
-    { href: "/dashboard/communications", label: "Comms", icon: Mail },
-    { href: "/dashboard/insights", label: "Insights", icon: BarChart3 },
+    // { href: "/dashboard/communications", label: "Comms", icon: Mail },
+    // { href: "/dashboard/insights", label: "Insights", icon: BarChart3 },
+    { href: "/dashboard/team", label: "team", icon: BadgePlus },
     { href: "/dashboard/settings", label: "Settings", icon: Settings },
   ];
 
@@ -50,7 +51,7 @@ export function AppSidebar() {
     <Sidebar
       variant="inset"
       collapsible="icon"
-      className="sidebar border-r bg-white/80 backdrop-blur-md"
+      className="sidebar border-r bg-white/80 backdrop-blur-md flex h-dvh min-h-screen flex-col"
     >
       <SidebarHeader className="px-4 py-4">
         <div className="flex items-center justify-between">
@@ -80,7 +81,7 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
 
-      <SidebarContent>
+       <SidebarContent className="flex-1 overflow-y-auto">
         <SidebarGroup>
           <SidebarGroupLabel className="text-gray-400">Main</SidebarGroupLabel>
           <SidebarMenu>
@@ -109,9 +110,9 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t bg-white/60">
         {/* Expanded: show user info + full button */}
-        {!isCollapsed ? (
+        {!isCollapsed && (
+        <SidebarFooter className="mb-auto shrink-0 border-t bg-white/60 border rounded-md">
           <div className="flex items-center justify-between">
             <div className="min-w-0">
               <p className="text-sm font-medium truncate">
@@ -129,19 +130,21 @@ export function AppSidebar() {
               Sign out
             </button>
           </div>
-        ) : (
-          // Collapsed: just an icon button (with title for a11y)
-          <div className="flex items-center justify-center py-2">
-            <button
-              onClick={handleSignOut}
-              title="Sign out"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-600 text-white hover:bg-indigo-700"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-          </div>
-        )}
-      </SidebarFooter>
+        </SidebarFooter>
+        ) 
+        // : (
+        //   // Collapsed: just an icon button (with title for a11y)
+        //   <div className="flex items-center justify-center py-2">
+        //     <button
+        //       onClick={handleSignOut}
+        //       title="Sign out"
+        //       className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-600 text-white hover:bg-indigo-700"
+        //     >
+        //       <LogOut className="h-4 w-4" />
+        //     </button>
+        //   </div>
+        // )
+        }
 
       <SidebarRail />
     </Sidebar>

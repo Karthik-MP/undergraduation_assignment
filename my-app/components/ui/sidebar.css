@@ -20,17 +20,19 @@
 }
 
 /* Optional: make sure the sidebar itself takes full height */
+/* globals.css */
 .sidebar {
   position: relative;
   z-index: 30;
   display: flex;
   flex-direction: column;
   width: var(--sidebar-width);
-  height: 100vh;
+  /* height: 100vh;  ← remove this line */
   flex-shrink: 0;
   border-right: 1px solid hsl(var(--border));
   background-color: hsl(var(--background));
 }
+
 
 /* Optional utility: inset container (used by <SidebarInset>) */
 .sidebar-inset > header {
