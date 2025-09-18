@@ -72,9 +72,19 @@ export default function StudentsPage() {
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <Card className="shadow-xl rounded-2xl border border-gray-200">
-        <CardHeader>
-          <CardTitle className="text-2xl text-indigo-700">Student Directory</CardTitle>
-          <p className="text-sm text-gray-500">Search, filter, and manage students</p>
+        <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <CardTitle className="text-2xl text-indigo-700">Student Directory</CardTitle>
+            <p className="text-sm text-gray-500">Search, filter, and manage students</p>
+          </div>
+          <Button
+            asChild
+            className="bg-indigo-600 hover:bg-indigo-700"
+          >
+            <Link href="/dashboard/addstudent">
+              Add Student
+            </Link>
+          </Button>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Controls */}

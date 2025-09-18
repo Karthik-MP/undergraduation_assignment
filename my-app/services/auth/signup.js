@@ -23,7 +23,7 @@ export async function signupWithEmail({ fullName, email, password }) {
     await updateProfile(cred.user, { displayName: fullName });
 
     // 3) Send email verification
-    await sendEmailVerification(cred.user);
+    // await sendEmailVerification(cred.user);
 
     return { user: cred.user };
   } catch (err) {

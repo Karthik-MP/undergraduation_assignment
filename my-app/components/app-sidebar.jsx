@@ -14,7 +14,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { usePathname, useRouter } from "next/navigation";
-import { Home, Users, Mail, BarChart3, Settings, LogOut, BadgePlus } from "lucide-react";
+import { Home, Users, Mail, BarChart3, Settings, LogOut, BadgePlus, PlusCircle, GroupIcon } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { auth } from "@/services/firebase";
 import { useAuth } from "@/contexts/AuthContext"; // <- adjust path to your provider
@@ -32,9 +32,9 @@ export function AppSidebar() {
   const nav = [
     { href: "/dashboard", label: "Home", icon: Home },
     { href: "/dashboard/students", label: "Students", icon: Users },
-    // { href: "/dashboard/communications", label: "Comms", icon: Mail },
+    { href: "/dashboard/addstudent", label: "Add Student", icon: PlusCircle },
     // { href: "/dashboard/insights", label: "Insights", icon: BarChart3 },
-    { href: "/dashboard/team", label: "team", icon: BadgePlus },
+    { href: "/dashboard/team", label: "team", icon: GroupIcon },
     { href: "/dashboard/settings", label: "Settings", icon: Settings },
   ];
 
